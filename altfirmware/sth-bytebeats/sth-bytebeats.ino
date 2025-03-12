@@ -9,7 +9,7 @@ const byte sine256[] PROGMEM = { // sine wavetable
 };
 //played like so
 
-bool debug = false;
+bool debug = true;
 
 // for the sine waves
 unsigned int Acc[3];
@@ -43,9 +43,9 @@ int pb2 = 1;
 int pb2total = 28;
 
 // these ranges are provisional and in schollz equations need to be reset
-volatile int aMax = 99, aMin = 0, bMax = 99, bMin = 0, cMax = 99, cMin = 0;
+volatile int aMax = 255, aMin = 0, bMax = 255, bMin = 0, cMax = 512, cMin = 4; // these are adjusted high for nybl
 long t = 0;
-volatile int a, b, c;
+volatile int a, b, c, k;
 volatile int offA, offB, offC;
 volatile int result;
 int timeToReadPots = 0;
@@ -58,12 +58,14 @@ void knobs() {
   c = map(analogRead(A2), 0, 1023, cMin, cMax) + offC;
   intOrExt = digitalRead(intOrExtPin); // A4
   if (debug) {
+    /*
     Serial.print("a:");
     Serial.println(a);
     Serial.print("b:");
     Serial.println(b);
     Serial.print("c:");
     Serial.println(c);
+    */
   }
 }
 inline void setLimits(byte a1, byte a2, byte b1, byte b2, byte c1, byte c2) {
@@ -99,6 +101,23 @@ void onButtonReleased() {
     Serial.println(prog);
   }
 }
+/**
+    handle right button short release
+    this version for the nyblcore
+*/
+void onButtonReleasednybl() {
+
+  if (k < 40) {
+      k++;
+    } else if (k == 40) {
+      k = 0;
+    }
+    prog = k;
+  if (debug) {
+    Serial.print("PROGRAM: ");
+    Serial.println(prog);
+  }
+}
 
 unsigned long getButtonPressDuration() {
   static unsigned long startTime = 0;  // Use static variable to retain state
@@ -126,7 +145,8 @@ void buttons() {
     //change bank
     unsigned long pressDuration = getButtonPressDuration();
     if (pressDuration > 100) {
-      onButtonReleased();
+      //onButtonReleased(); // poetasters
+      onButtonReleasednybl(); // nyblcore
       digitalWrite (trigLed, HIGH);
       delay(50);
       digitalWrite (trigLed, LOW);
@@ -136,14 +156,15 @@ void buttons() {
   }
 }
 
-#include "bytebeats.h"
-
+//#include "bytebeats.h"
+#include "nybllcore.h"
 
 void setup() {
   // put your setup code here, to run once:
   DDRD = // 0b11111111;//DDRD = DDRD | B11111100; //  // for serial we need a pin :) 0b11111111
   DDRB = 0b11111111;
   offA = 0; offB = 0; offC = 0;
+  k = 0;
   pinMode(trigLed, OUTPUT);
   pinMode(sampleOrTrackPin, INPUT_PULLUP);
   pinMode(intOrExtPin, INPUT_PULLUP);
@@ -168,33 +189,40 @@ void loop() {
   if (digitalRead(trigIn) == HIGH) {
     //We have a trig! Lets lock the sample value and send it.
     //light up the trigLed! We have a trig!
-    //if(debug) Serial.println("trig");
+   
     digitalWrite(trigLed, HIGH);
   } else {
     digitalWrite(trigLed, LOW);
+     if(debug) Serial.println("trig");
   }
   
-  t++; // this is our main var for generating beats
 
- if (t > 65536) t = -65536;
 
   // the top switch is set to 'internal' source
   // we use it to change the frequency upwards
   if (intOrExt == LOW) {
-    enc_offset = 32;
+    if(debug) Serial.println("int noise");
+    enc_offset = 8;
   } else {
-    enc_offset = 96;
+    enc_offset = 256;
+    if (c < 256) enc_offset = c;
   }
+  
 
-  // switch bank and choose voice
-  switch (bank) {
+  
+  // switch bank and choose voice (this is poetaster's version)
+  /*switch (bank) {
     case 1:
       rythmical(pb1);
       break;
     case 2:
       melodious(pb2);
       break;
-  }
+  }*/
+  
+    bb_set(k, a, b);
+
+   result = bb(k);
 
   /*
      this plays a 3 part sine wave :)
@@ -209,6 +237,9 @@ void loop() {
     sample = ( pgm_read_byte(&sine256[Acc[0] >> 8])  + pgm_read_byte(&sine256[Acc[1] >> 8]) + pgm_read_byte(&sine256[Acc[2] >> 8]) ) / 3;
     //pgm_read_byte(&sine256[i++]);
   */
+  
+ t++; // this is our main var for generating beats
+ if (t > 65536) t = -65536;    
 
 
   // write the results out to dac
